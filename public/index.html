@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>주사위 카지노</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        // 여기에 React 컴포넌트 코드 붙여넣기
+        import React, { useState, useEffect } from 'react';
+
+const CasinoDiceGame = () => {
+  // 게임 상태
+  const [balance, setBalance] = useState(5000000);
+  const [selectedNumbers, setSelectedNumbers] = useState([]);
+  const [dice1, setDice1] = useState(1);
+  const [dice2, setDice2] = useState(1);
+  const [isRolling, setIsRolling] = useState(false);
+  const [gameResult, setGameResult] = useState(null);
+  const [loanAmount, setLoanAmount] = useState(0);
+  const [loanTime, setLoanTime] = useState(null);
+  const [isBankrupt, setIsBankrupt] = useState(false);
+  const [gameHistory, setGameHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // 상수
+  const BET_AMOUNT = 1000000;
+  const INITIAL_BALANCE = 5000000;
+  const LOAN_AMOUNT = 10000000;
+  const LOAN_TIME_LIMIT = 24 * 60 * 60 * 1000; // 24시간
+
+  // 로컬 스토리지에서 데이터 로드
+  useEffect(() => {
+    const savedData = localStorage.getItem('casinoGameData');
+    if (savedData) {
+      const data = JSON.parse(savedData);
+      setBalance(data.balance || INITIAL_BALANCE);
+      setLoanAmount(data.loanAmount || 0);
+      setLoanTime(data.loanTime);
+      setGameHistory(data.gameHistory || []);
+      setIsBankrupt(data.isBankrupt || false);
+    }
+  }, []);
+
+  // 데이터 저장
+  const saveGameData = (newBalance, newLoanAmount, newLoanTime, newHistory, bankrupt = false) => {
+    const gameData = {
+      balance: newBalance,
+      loanAmount: newLoanAmount,
+      loanTime: newLoanTime,
+      gameHistory: newHistory,
+      isBankrupt: bankrupt,
+      lastUpdated: Date.now()
+    };
+    localStorage.setItem('casinoGameData', JSON.stringify(gameData));
+  };
+
+  // 대출 시간 체크
+  useEffect(() => {
+    if (loanTime && loanAmount > 0) {
+      const timer = setInterval(() => {
+        const timeElapsed = Date.now() - loanTime;
+        if (timeElapsed > LOAN_TIME_LIMIT && balance < loanAmount) {
+          setIsBankrupt(true);
+          saveGameData(balance, loanAmount, loanTime, gameHistory, true);
+        }
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [loanTime, loanAmount, balance, gameHistory]);
+
+  // 숫자 선택/해제
+  const toggleNumber = (num) => {
+    if (selectedNumbers.includes(num)) {
+      setSelectedNumbers(selectedNumbers.filter(n => n !== num));
+    } else {
+      setSelectedNumbers([...selectedNumbers, num]);
+    }
+  };
+
+  // 배당률 계산
+  const calculatePayout = (d1, d2, betNumbers) => {
+    // 1. 동일한 주사위 (40배)
+    if (d1 === d2 && betNumbers.includes(d1)) {
+      return { rate: 40, type: '동일 주사위' };
+    }
+    
+    // 2. 특수 조합 (20배)
+    const isSpecialCombo = (
+      (d1 === 1 && d2 === 5) || (d1 === 5 && d2 === 1) ||
+      (d1 === 3 && d2 === 5) || (d1 === 5 && d2 === 3)
+    );
+    if (isSpecialCombo && (betNumbers.includes(d1) || betNumbers.includes(d2))) {
+      return { rate: 20, type: '특수 조합' };
+    }
+    
+    // 3. 일반 맞추기 (2배)
+    if (betNumbers.includes(d1) || betNumbers.includes(d2)) {
+      return { rate: 2, type: '일반 맞추기' };
+    }
+    
+    // 4. 모두 틀림 (0배)
+    return { rate: 0, type: '꽝' };
+  };
+
+  // 주사위 굴리기
+  const rollDice = () => {
+    if (selectedNumbers.length === 0) {
+      alert('숫자를 선택해주세요!');
+      return;
+    }
+    
+    if (balance < BET_AMOUNT) {
+      alert('잔액이 부족합니다!');
+      return;
+    }
+
+    setIsRolling(true);
+    setGameResult(null);
+
+    // 애니메이션 효과
+    const rollAnimation = setInterval(() => {
+      setDice1(Math.floor(Math.random() * 6) + 1);
+      setDice2(Math.floor(Math.random() * 6) + 1);
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(rollAnimation);
+      
+      const finalDice1 = Math.floor(Math.random() * 6) + 1;
+      const finalDice2 = Math.floor(Math.random() * 6) + 1;
+      
+      setDice1(finalDice1);
+      setDice2(finalDice2);
+      
+      const payout = calculatePayout(finalDice1, finalDice2, selectedNumbers);
+      const totalPayout = BET_AMOUNT * payout.rate;
+      const profit = totalPayout - BET_AMOUNT;
+      const newBalance = balance - BET_AMOUNT + totalPayout;
+      
+      const gameRecord = {
+        dice1: finalDice1,
+        dice2: finalDice2,
+        betNumbers: [...selectedNumbers],
+        payoutRate: payout.rate,
+        payoutType: payout.type,
+        profit: profit,
+        balanceAfter: newBalance,
+        timestamp: new Date().toLocaleString()
+      };
+      
+      const newHistory = [gameRecord, ...gameHistory].slice(0, 50); // 최근 50게임만 저장
+      
+      setBalance(newBalance);
+      setGameHistory(newHistory);
+      setGameResult({
+        ...payout,
+        profit: profit,
+        totalPayout: totalPayout
+      });
+      
+      // 파산 체크
+      if (newBalance <= 0 && loanAmount === 0) {
+        setIsBankrupt(true);
+        saveGameData(newBalance, loanAmount, loanTime, newHistory, true);
+      } else {
+        saveGameData(newBalance, loanAmount, loanTime, newHistory);
+      }
+      
+      setIsRolling(false);
+      setSelectedNumbers([]);
+    }, 2000);
+  };
+
+  // 대출
+  const takeLoan = () => {
+    if (loanAmount > 0) {
+      alert('이미 대출을 받았습니다!');
+      return;
+    }
+    
+    const newBalance = balance + LOAN_AMOUNT;
+    const newLoanTime = Date.now();
+    
+    setBalance(newBalance);
+    setLoanAmount(LOAN_AMOUNT);
+    setLoanTime(newLoanTime);
+    setIsBankrupt(false);
+    
+    saveGameData(newBalance, LOAN_AMOUNT, newLoanTime, gameHistory);
+    alert('대출 완료! 24시간 내에 상환해주세요.');
+  };
+
+  // 대출 상환
+  const repayLoan = () => {
+    if (loanAmount === 0) {
+      alert('대출이 없습니다!');
+      return;
+    }
+    
+    if (balance < loanAmount) {
+      alert('잔액이 부족합니다!');
+      return;
+    }
+    
+    const newBalance = balance - loanAmount;
+    setBalance(newBalance);
+    setLoanAmount(0);
+    setLoanTime(null);
+    
+    saveGameData(newBalance, 0, null, gameHistory);
+    alert('대출 상환 완료!');
+  };
+
+  // 게임 리셋
+  const resetGame = () => {
+    if (confirm('정말로 게임을 리셋하시겠습니까?')) {
+      setBalance(INITIAL_BALANCE);
+      setLoanAmount(0);
+      setLoanTime(null);
+      setIsBankrupt(false);
+      setGameHistory([]);
+      setSelectedNumbers([]);
+      setGameResult(null);
+      localStorage.removeItem('casinoGameData');
+    }
+  };
+
+  // 대출 남은 시간 계산
+  const getRemainingLoanTime = () => {
+    if (!loanTime || loanAmount === 0) return null;
+    const elapsed = Date.now() - loanTime;
+    const remaining = LOAN_TIME_LIMIT - elapsed;
+    if (remaining <= 0) return '시간 초과!';
+    
+    const hours = Math.floor(remaining / (1000 * 60 * 60));
+    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+    return `${hours}시간 ${minutes}분`;
+  };
+
+  if (isBankrupt) {
+    return (
+      <div className="min-h-screen bg-red-900 flex items-center justify-center p-4">
+        <div className="bg-red-800 p-8 rounded-lg text-center text-white max-w-md">
+          <h1 className="text-3xl font-bold mb-4">💥 파산!</h1>
+          <p className="mb-4">게임이 종료되었습니다.</p>
+          <button 
+            onClick={resetGame}
+            className="bg-red-600 px-6 py-3 rounded-lg hover:bg-red-500 transition-colors"
+          >
+            새 게임 시작
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-900 to-green-700 p-4">
+      <div className="max-w-4xl mx-auto">
+        {/* 헤더 */}
+        <div className="bg-green-800 rounded-lg p-6 mb-6 text-white">
+          <h1 className="text-3xl font-bold text-center mb-4">🎲 주사위 카지노 🎲</h1>
+          
+          {/* 잔액 및 대출 정보 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+            <div className="bg-green-700 p-4 rounded-lg">
+              <div className="text-sm opacity-80">현재 잔액</div>
+              <div className="text-2xl font-bold">{balance.toLocaleString()}원</div>
+            </div>
+            
+            <div className="bg-green-700 p-4 rounded-lg">
+              <div className="text-sm opacity-80">대출 금액</div>
+              <div className="text-2xl font-bold">{loanAmount.toLocaleString()}원</div>
+            </div>
+            
+            <div className="bg-green-700 p-4 rounded-lg">
+              <div className="text-sm opacity-80">베팅 금액</div>
+              <div className="text-2xl font-bold">{BET_AMOUNT.toLocaleString()}원</div>
+            </div>
+          </div>
+          
+          {loanAmount > 0 && (
+            <div className="mt-4 text-center text-yellow-300">
+              대출 상환 시간: {getRemainingLoanTime()}
+            </div>
+          )}
+        </div>
+
+        {/* 게임 영역 */}
+        <div className="bg-white rounded-lg p-6 mb-6">
+          {/* 숫자 선택 */}
+          <div className="mb-6">
+            <h3 className="text-xl font-bold mb-4 text-center">베팅할 숫자를 선택하세요</h3>
+            <div className="grid grid-cols-6 gap-3 max-w-md mx-auto">
+              {[1, 2, 3, 4, 5, 6].map(num => (
+                <button
+                  key={num}
+                  onClick={() => toggleNumber(num)}
+                  className={`w-12 h-12 rounded-lg font-bold text-lg transition-all ${
+                    selectedNumbers.includes(num)
+                      ? 'bg-blue-500 text-white shadow-lg scale-110'
+                      : 'bg-gray-200 hover:bg-gray-300'
+                  }`}
+                >
+                  {num}
+                </button>
+              ))}
+            </div>
+            {selectedNumbers.length > 0 && (
+              <div className="text-center mt-3 text-gray-600">
+                선택된 숫자: {selectedNumbers.join(', ')}
+              </div>
+            )}
+          </div>
+
+          {/* 주사위 */}
+          <div className="mb-6">
+            <div className="flex justify-center items-center gap-8 mb-6">
+              <div className={`w-24 h-24 bg-white border-4 border-gray-800 rounded-lg flex items-center justify-center text-4xl font-bold transition-transform ${isRolling ? 'animate-spin' : ''}`}>
+                {dice1}
+              </div>
+              <div className={`w-24 h-24 bg-white border-4 border-gray-800 rounded-lg flex items-center justify-center text-4xl font-bold transition-transform ${isRolling ? 'animate-spin' : ''}`}>
+                {dice2}
+              </div>
+            </div>
+            
+            <div className="text-center">
+              <button
+                onClick={rollDice}
+                disabled={isRolling || selectedNumbers.length === 0}
+                className="bg-red-500 text-white px-8 py-4 rounded-lg text-xl font-bold hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                {isRolling ? '굴리는 중...' : '주사위 굴리기!'}
+              </button>
+            </div>
+          </div>
+
+          {/* 게임 결과 */}
+          {gameResult && (
+            <div className="text-center p-4 bg-gray-100 rounded-lg">
+              <div className="text-lg font-bold mb-2">
+                결과: {gameResult.type} ({gameResult.rate}배)
+              </div>
+              <div className={`text-2xl font-bold ${gameResult.profit > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                {gameResult.profit > 0 ? '+' : ''}{gameResult.profit.toLocaleString()}원
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 버튼들 */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <button
+            onClick={takeLoan}
+            disabled={loanAmount > 0}
+            className="bg-yellow-500 text-white p-3 rounded-lg font-bold hover:bg-yellow-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            대출받기
+          </button>
+          
+          <button
+            onClick={repayLoan}
+            disabled={loanAmount === 0 || balance < loanAmount}
+            className="bg-green-500 text-white p-3 rounded-lg font-bold hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+          >
+            대출상환
+          </button>
+          
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="bg-blue-500 text-white p-3 rounded-lg font-bold hover:bg-blue-600 transition-colors"
+          >
+            게임기록
+          </button>
+          
+          <button
+            onClick={resetGame}
+            className="bg-red-500 text-white p-3 rounded-lg font-bold hover:bg-red-600 transition-colors"
+          >
+            게임리셋
+          </button>
+        </div>
+
+        {/* 게임 기록 */}
+        {showHistory && (
+          <div className="bg-white rounded-lg p-6">
+            <h3 className="text-xl font-bold mb-4">게임 기록 (최근 10게임)</h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {gameHistory.slice(0, 10).map((game, index) => (
+                <div key={index} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg text-sm">
+                  <div>
+                    주사위: ({game.dice1}, {game.dice2}) | 
+                    베팅: [{game.betNumbers.join(',')}] | 
+                    {game.payoutType} ({game.payoutRate}배)
+                  </div>
+                  <div className={`font-bold ${game.profit > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                    {game.profit > 0 ? '+' : ''}{game.profit.toLocaleString()}원
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 게임 규칙 */}
+        <div className="bg-gray-800 text-white rounded-lg p-6 mt-6">
+          <h3 className="text-xl font-bold mb-4">🎯 게임 규칙</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 className="font-bold mb-2">배당률:</h4>
+              <ul className="space-y-1">
+                <li>• 동일 주사위 (예: 2,2): 40배</li>
+                <li>• 특수 조합 (1,5) 또는 (3,5): 20배</li>
+                <li>• 일반 맞추기: 2배</li>
+                <li>• 모두 틀림: 0배</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-bold mb-2">기본 정보:</h4>
+              <ul className="space-y-1">
+                <li>• 시작 자금: 500만원</li>
+                <li>• 베팅 금액: 100만원 (고정)</li>
+                <li>• 대출 한도: 1,000만원</li>
+                <li>• 대출 기간: 24시간</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default CasinoDiceGame;
+    </script>
+</body>
+</html>
