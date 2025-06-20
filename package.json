@@ -1,0 +1,16 @@
+{
+  "name": "casino-dice-game",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "serve .",
+    "build": "echo 'No build needed'",
+    "start": "serve ."
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
